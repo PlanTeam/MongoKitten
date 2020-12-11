@@ -10,14 +10,21 @@ extension CodingUserInfoKey {
 public final class GridFSBucket {
     public static let defaultChunkSize: Int32 = 261_120 // 255 kB
     
+    /// The collection in which `GridFSFile` metadata is stored
     public let filesCollection: MongoCollection
+    
+    /// The collection in which the chunks of binary data are stored
     public let chunksCollection: MongoCollection
     
     private var didEnsureIndexes = false
     
+    /// The `EventLoop` on which the query will be executed
     public var eventLoop: EventLoop {
         return filesCollection.database.eventLoop
     }
+    
+    /// The `EventLoop` on which the resulting Future will be completed
+    public var hoppedEventLoop: EventLoop? { filesCollection.database.hoppedEventLoop }
     
     public init(named name: String = "fs", in database: MongoDatabase) {
         self.filesCollection = database[name + ".files"]

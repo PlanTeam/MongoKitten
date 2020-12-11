@@ -3,10 +3,18 @@ import Foundation
 public struct GridFSFile: Codable {
     internal var fs: GridFSBucket
     
+    /// The file's unique ID
     public let _id: Primitive
+    
+    /// The total size of the file
     public internal(set) var length: Int
+    
+    /// The maximum size of each chunk in the chunks collection
     public private(set) var chunkSize: Int32
+    
+    /// The date at which this file was uploaded to GridFS
     public let uploadDate: Date
+    
     public internal(set) var md5: String?
     public var filename: String?
     
@@ -36,6 +44,7 @@ public struct GridFSFile: Codable {
     /// We use the getters and setters so we can decode and encode the aliasses without warnings, while providing a deprecation warning to users trying to use the property
     private var _aliasses: [String]?
     
+    /// Any additional metadata needed for this file. The owner of the file, could be a common example.
     public var metadata: Document?
     
     internal init(id: Primitive, length: Int, chunkSize: Int32, metadata: Document?, filename: String?, fs: GridFSBucket) {
@@ -52,6 +61,7 @@ public struct GridFSFile: Codable {
         case _id, length, chunkSize, uploadDate, md5, filename, contentType, aliasses, metadata
     }
     
+    /// A helper type that reads the files chunks into a contiguous blob.
     public var reader: GridFSReader {
         return GridFSReader(file: self)
     }
@@ -89,5 +99,4 @@ public struct GridFSFile: Codable {
         try container.encode(self._aliasses, forKey: .aliasses)
         try container.encodeBSONPrimitive(self.metadata, forKey: .metadata)
     }
-    
 }

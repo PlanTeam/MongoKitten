@@ -2,24 +2,29 @@ import NIO
 import MongoClient
 
 extension MongoCursor: QueryCursor {
+    /// The `EventLoop` on which the query will be executed
     public var eventLoop: EventLoop { connection.eventLoop }
-
+    
+    /// Gets the connection on which the cursor will be executing GetMore and Close commands
     public func getConnection() -> EventLoopFuture<MongoConnection> {
         return connection.eventLoop.makeSucceededFuture(connection)
     }
 
     public typealias Element = Document
 
+    /// Executes the cursor, if that is needed, and returns a usable FinalizedCursor
     public func execute() -> EventLoopFuture<FinalizedCursor<MongoCursor>> {
         return connection.eventLoop.makeSucceededFuture(FinalizedCursor(basedOn: self, cursor: self))
     }
 
+    /// Any transforms tht will need to be applied to elements
     public func transformElement(_ element: Document) throws -> Document {
         return element
     }
 }
 
 extension MongoCursor {
+    /// Drains the entire cursor into an array, this can be a very memory-heavy process.
     public func drain() -> EventLoopFuture<[Document]> {
         return CursorDrainer(cursor: self).collectAll()
     }
@@ -95,10 +100,14 @@ fileprivate extension CursorBatch where Element == Document {
 public protocol QueryCursor {
     /// The Element type of the cursor
     associatedtype Element
-
+    
+    /// The `EventLoop` on which the query will be executed
     var eventLoop: EventLoop { get }
+
+    /// The `EventLoop` on which the resulting Future will be completed
     var hoppedEventLoop: EventLoop? { get }
 
+    /// The connection on which commands related to this cursor will be executed.
     func getConnection() -> EventLoopFuture<MongoConnection>
 
     /// Executes the cursor, returning a `FinalizedCursor` after the operation has completed.
@@ -147,7 +156,7 @@ extension QueryCursor {
 }
 
 extension QueryCursor {
-    /// Executes the given `handler` for every element of the cursor.
+    /// Executes the given `handler` for every element of the cursor. Drains the cursor as fast as possible.
     ///
     /// - parameter handler: A handler to execute on every result
     /// - returns: A future that resolves when the operation is complete, or fails if an error is thrown
@@ -175,7 +184,11 @@ extension QueryCursor {
             return nextBatch()
         }._mongoHop(to: self.hoppedEventLoop)
     }
-
+    
+    /// Executes the given `handler` for every element of the cursor. It waits for the handler to return a successful future before continuing to the next element.
+    ///
+    /// - parameter batchsize: The amount of entities to be fetched from the cursor
+    /// - parameter failable: If `true`, entities that fail during any `map` or `decode` phases are ignored
     @discardableResult
     public func sequentialForEach(handler: @escaping (Element) throws -> EventLoopFuture<Void>) -> EventLoopFuture<Void> {
         return execute().flatMap { finalizedCursor in
@@ -232,6 +245,8 @@ extension QueryCursor {
 
     /// Executes the cursor and returns all results as an array
     /// Please be aware that this may consume a large amount of memory or time with a large number of results
+    ///
+    /// - parameter failable: If `true`, entities that fail during any `map` or `decode` phases are ignored
     public func allResults(failable: Bool = false) -> EventLoopFuture<[Element]> {
         return execute().flatMap { finalizedCursor in
             var promise = self.eventLoop.makePromise(of: [Element].self)
@@ -268,7 +283,11 @@ public final class FinalizedCursor<Base: QueryCursor> {
         self.base = base
         self.cursor = cursor
     }
-
+    
+    /// Fetches the next batch of entities.
+    ///
+    /// - parameter batchsize: The amount of entities to be fetched from the cursor
+    /// - parameter failable: If `true`, entities that fail during any `map` or `decode` phases are ignored
     public func nextBatch(batchSize: Int = 101, failable: Bool = false) -> EventLoopFuture<[Base.Element]> {
         return cursor.getMore(batchSize: batchSize)._mongoHop(to: cursor.hoppedEventLoop).flatMapThrowing { batch in
             if failable {
